@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+asyncpg
+pydantic
+pydantic-settings
+python-multipart
+pypdf
+langchain
+langchain-openai
+langchain-community
