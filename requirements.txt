@@ -11,3 +11,5 @@ langchain
 langchain-openai
 langchain-community
 rank_bm25
+flashrank
+

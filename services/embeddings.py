@@ -2,6 +2,10 @@ import json
 
 from langchain_chroma import Chroma
 from langchain_classic.retrievers import EnsembleRetriever
+from langchain_classic.retrievers.contextual_compression import (
+    ContextualCompressionRetriever,
+)
+from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document as LangchainDocument
@@ -173,7 +177,7 @@ class EmbeddingService:
         else:
             standalone_query = query
 
-        search_kwargs = {"k": 4}
+        search_kwargs = {"k": 10}
         if file_key:
             search_kwargs["filter"] = {"source": file_key}
 
@@ -194,12 +198,17 @@ class EmbeddingService:
                 for d, m in zip(documents, metadatas)
             ]
             bm25_retriever = BM25Retriever.from_documents(doc_objects)
-            bm25_retriever.k = 4
-            retriever = EnsembleRetriever(
-                retrievers=[bm25_retriever, chroma_retriever], weights=[0.25, 0.75]
+            bm25_retriever.k = 10
+            base_retriever = EnsembleRetriever(
+                retrievers=[bm25_retriever, chroma_retriever], weights=[0.5, 0.5]
             )
         else:
-            retriever = chroma_retriever
+            base_retriever = chroma_retriever
+
+        compressor = FlashrankRerank(top_n=4)
+        retriever = ContextualCompressionRetriever(
+            base_compressor=compressor, base_retriever=base_retriever
+        )
 
         docs = await retriever.ainvoke(standalone_query)
         context = format_docs(docs)
@@ -219,7 +228,7 @@ class EmbeddingService:
         for i, doc in enumerate(docs):
             source = str(doc.metadata.get("source", "Unknown"))
             page = doc.metadata.get("page", 1)
-            text = doc.page_content[:200]
+            text = doc.page_content
 
             citations.append(
                 {
