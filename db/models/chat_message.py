@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, JSON
 
 from db.base import Base
 
@@ -19,6 +19,7 @@ class ChatMessage(Base):
 
     role = Column(String(50), nullable=False)  # user or assistant
     content = Column(Text, nullable=False)
+    citations = Column(JSON, nullable=True)
 
     created_at = Column(
         DateTime,

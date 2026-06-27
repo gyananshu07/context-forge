@@ -1,11 +1,9 @@
 import json
-from operator import itemgetter
 
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import select
@@ -23,7 +21,9 @@ _global_vector_store = Chroma(
 
 
 def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
+    return "\n\n".join(
+        f"Source [{i + 1}]:\n{doc.page_content}" for i, doc in enumerate(docs)
+    )
 
 
 class EmbeddingService:
@@ -48,7 +48,9 @@ class EmbeddingService:
 
         return len(chunks)
 
-    async def _fetch_and_format_history(self, session: AsyncSession, document_id: int) -> list:
+    async def _fetch_and_format_history(
+        self, session: AsyncSession, document_id: int
+    ) -> list:
         """Fetches the conversation history for a given document and formats it for LangChain."""
         result = await session.execute(
             select(ChatMessage)
@@ -83,28 +85,14 @@ class EmbeddingService:
             [
                 (
                     "system",
-                    "Answer the following question based only on the provided context.\n\n<context>\n{context}\n</context>",
+                    "Answer the following question based only on the provided context. You must cite your sources inline using [1], [2], etc. corresponding to the Source number provided in the context.\n\n<context>\n{context}\n</context>",
                 ),
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{input}"),
             ]
         )
 
-        retriever = self.vector_store.as_retriever(
-            search_kwargs={"k": 4}
-        )
-
-        return (
-            {
-                "context": itemgetter("input")
-                | retriever
-                | RunnableLambda(format_docs),
-                "chat_history": itemgetter("chat_history"),
-                "input": itemgetter("input"),
-            }
-            | prompt
-            | llm
-        )
+        return prompt | llm
 
     def _extract_text_from_chunk(self, chunk_content) -> str:
         """Safely extracts string text from LangChain message chunks, handling tool calls."""
@@ -117,10 +105,19 @@ class EmbeddingService:
             )
         return str(chunk_content)
 
-    async def _save_assistant_message(self, session: AsyncSession, document_id: int, content: str):
+    async def _save_assistant_message(
+        self,
+        session: AsyncSession,
+        document_id: int,
+        content: str,
+        citations: list = None,
+    ):
         """Persists the final assistant response to the database."""
         assistant_msg = ChatMessage(
-            document_id=document_id, role="assistant", content=content
+            document_id=document_id,
+            role="assistant",
+            content=content,
+            citations=citations,
         )
         session.add(assistant_msg)
         await session.commit()
@@ -130,9 +127,33 @@ class EmbeddingService:
         chat_history = await self._fetch_and_format_history(session, document_id)
         chain = self._create_chat_chain()
 
+        retriever = self.vector_store.as_retriever(search_kwargs={"k": 4})
+        docs = await retriever.ainvoke(query)
+        context = format_docs(docs)
+
+        citations = []
+        for i, doc in enumerate(docs):
+            source = str(doc.metadata.get("source", "Unknown"))
+            page = doc.metadata.get("page", 1)
+            text = doc.page_content[:200]
+            if len(doc.page_content) > 200:
+                text += "..."
+
+            citations.append(
+                {
+                    "id": f"cit-{i}",
+                    "source": source.split("\\")[-1].split("/")[-1],
+                    "text": text,
+                    "page": page,
+                }
+            )
+
+        if citations:
+            yield f"data: {json.dumps({'citations': citations})}\n\n"
+
         full_content = ""
         async for chunk in chain.astream(
-            {"input": query, "chat_history": chat_history}
+            {"input": query, "chat_history": chat_history, "context": context}
         ):
             if chunk.content:
                 text_chunk = self._extract_text_from_chunk(chunk.content)
@@ -140,7 +161,8 @@ class EmbeddingService:
                     full_content += text_chunk
                     payload = json.dumps({"content": text_chunk})
                     yield f"data: {payload}\n\n"
-
-        await self._save_assistant_message(session, document_id, full_content)
+        await self._save_assistant_message(
+            session, document_id, full_content, citations
+        )
 
         yield "data: [DONE]\n\n"
