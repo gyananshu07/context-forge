@@ -7,6 +7,7 @@ A high-performance FastAPI backend that powers a Retrieval-Augmented Generation 
 - **Document Processing**: Upload PDFs which are automatically chunked and embedded.
 - **Advanced Retrieval**:
   - **Hybrid Search**: Combines semantic search (ChromaDB) with keyword sparse search (BM25) using reciprocal rank fusion.
+  - **Document Reranking**: Uses Flashrank (cross-encoder) to re-score and compress initial retrieved chunks, surfacing the most relevant context.
   - **Query Contextualization**: Uses an LLM to rewrite ambiguous follow-up questions into standalone queries before retrieval.
   - **Isolated Search**: Restricts vector search strictly to the active document being queried.
 - **Streaming Responses**: Streams LLM responses back to the client using Server-Sent Events (SSE).
