@@ -32,7 +32,9 @@ class DocumentResponse(BaseModel):
 
 @router.get("/documents", response_model=list[DocumentResponse])
 async def get_documents(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Document))
+    result = await session.execute(
+        select(Document).order_by(Document.created_at.desc())
+    )
     documents = result.scalars().all()
 
     return [

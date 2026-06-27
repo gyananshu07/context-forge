@@ -51,6 +51,11 @@ async def get_chat_history(
     messages = result.scalars().all()
 
     return [
-        {"id": f"msg-{msg.id}", "role": msg.role, "content": msg.content, "citations": msg.citations}
+        {
+            "id": f"msg-{msg.id}",
+            "role": msg.role,
+            "content": msg.content,
+            "citations": msg.citations,
+        }
         for msg in messages
     ]

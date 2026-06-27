@@ -5,7 +5,10 @@ A high-performance FastAPI backend that powers a Retrieval-Augmented Generation 
 ## 🚀 Features
 
 - **Document Processing**: Upload PDFs which are automatically chunked and embedded.
-- **Vector Search**: Uses ChromaDB for lightning-fast semantic search and retrieval.
+- **Advanced Retrieval**:
+  - **Hybrid Search**: Combines semantic search (ChromaDB) with keyword sparse search (BM25) using reciprocal rank fusion.
+  - **Query Contextualization**: Uses an LLM to rewrite ambiguous follow-up questions into standalone queries before retrieval.
+  - **Isolated Search**: Restricts vector search strictly to the active document being queried.
 - **Streaming Responses**: Streams LLM responses back to the client using Server-Sent Events (SSE).
 - **Conversational Memory**: Automatically manages chat history with a sliding window approach, persisting conversation history in PostgreSQL.
 - **Robust Architecture**: Built with FastAPI, SQLAlchemy (async), and LangChain.
